@@ -13,26 +13,46 @@ CANONICAL_COLUMNS = [
     "date",
     "description",
     "amount",
+    "transaction_type",
+    "account_name",
     "category",
     "source_dataset",
 ]
 
 
 CATEGORY_MAP = {
-    # dataset 1 -> dataset 2 style
-    "food & drink": "Restaurants",
-    "rent": "Mortgage & Rent",
-    "utilities": "Bills & Utilities",
-    "entertainment": "Movies & DVDs",
-    # keep as-is when no reasonable direct mapping
-    "shopping": "Shopping",
-    "investment": "Investment",
-    "salary": "Salary",
-    "transportation": "Transportation",
-    "health": "Health",
-    "insurance": "Insurance",
-    "grocery": "Groceries",
-    "education": "Education",
+    # --- Dining consolidation ---
+    # Merge Restaurants, Fast Food, Food & Dining, and dataset-1 "Food & Drink"
+    # into a single "Dining" label. All represent money spent eating out.
+    "food & drink":  "Dining",
+    "restaurants":   "Dining",
+    "fast food":     "Dining",
+    "food & dining": "Dining",
+
+    # --- Entertainment consolidation ---
+    # Merge Movies & DVDs, Television, and Music into "Entertainment".
+    # Television (52 samples) and Music (124) are too small to learn alone,
+    # and all three represent discretionary media spending.
+    "entertainment": "Entertainment",
+    "movies & dvds": "Entertainment",
+    "television":    "Entertainment",
+    "music":         "Entertainment",
+
+    # --- Income consolidation ---
+    # Salary and Paycheck are semantically identical income transactions.
+    "salary":        "Income",
+    "paycheck":      "Income",
+
+    # --- Other cross-dataset normalisations ---
+    "rent":          "Mortgage & Rent",
+    "utilities":     "Bills & Utilities",
+    "shopping":      "Shopping",
+    "investment":    "Investment",
+    "transportation":"Transportation",
+    "health":        "Health",
+    "insurance":     "Insurance",
+    "grocery":       "Groceries",
+    "education":     "Education",
 }
 
 
@@ -54,8 +74,10 @@ def load_dataset_one(path: Path) -> pd.DataFrame:
         "Transaction Description": "description",
         "Category": "category",
         "Amount": "amount",
+        "Type": "transaction_type",
     }
     df = df.rename(columns=rename_map)
+    df["account_name"] = np.nan
     df["source_dataset"] = path.name
     return df
 
@@ -67,6 +89,8 @@ def load_dataset_two(path: Path) -> pd.DataFrame:
         "Description": "description",
         "Amount": "amount",
         "Category": "category",
+        "Transaction Type": "transaction_type",
+        "Account Name": "account_name",
     }
     df = df.rename(columns=rename_map)
     df["source_dataset"] = path.name
@@ -102,6 +126,15 @@ def standardize_schema(df: pd.DataFrame) -> pd.DataFrame:
     )
     out["date_month"] = out["date"].dt.month.astype(str)
     out["date_day_of_week"] = out["date"].dt.day_name()
+
+    # Normalize transaction_type to lowercase; fill missing as "unknown"
+    out["transaction_type"] = (
+        out["transaction_type"].map(_normalize_text).str.lower().replace("", "unknown")
+    )
+    # Normalize account_name to title case; fill missing as "unknown"
+    out["account_name"] = (
+        out["account_name"].map(_to_title_or_empty).replace("", "unknown")
+    )
 
     return out
 
@@ -154,12 +187,12 @@ def save_outputs(df: pd.DataFrame, output_dir: Path, seed: int = 42) -> None:
     test.to_csv(output_dir / "test.csv", index=False)
 
     feature_columns = [
-        "date",
         "description_clean",
         "amount",
         "date_month",
         "date_day_of_week",
-        "category",
+        "transaction_type",
+        "account_name",
     ]
     metadata_path = output_dir / "feature_columns.txt"
     metadata_path.write_text("\n".join(feature_columns) + "\n", encoding="utf-8")

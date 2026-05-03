@@ -1,6 +1,6 @@
-date
 description_clean
 amount
 date_month
 date_day_of_week
-category
+transaction_type
+account_name
