@@ -75,7 +75,9 @@ def tune_with_validation(x_train, y_train, x_val, y_val) -> dict:
     best_result: dict | None = None
 
     for params in param_grid:
-        clf = build_classifier(C=params["C"], class_weight="balanced", **{k: v for k, v in params.items() if k != "C"})
+        # Extract only kernel-specific params (exclude C and class_weight which we handle separately)
+        kwargs = {k: v for k, v in params.items() if k not in ["C", "class_weight"]}
+        clf = build_classifier(C=params["C"], class_weight="balanced", **kwargs)
         clf.fit(x_train, y_train)
         y_val_pred = clf.predict(x_val)
         score = f1_score(y_val, y_val_pred, average="macro", zero_division=0)
@@ -121,7 +123,7 @@ def main() -> None:
     x_train_val = feature_transformer.transform(x_train_val_raw)  # Use existing transformer, don't refit
     y_train_val = pd.concat([y_train, y_val], ignore_index=True)  # Use same label arrays (consistent encoding)
 
-    clf = build_classifier(C=best_params["C"], class_weight="balanced", **{k: v for k, v in best_params.items() if k != "C"})
+    clf = build_classifier(C=best_params["C"], class_weight="balanced", **{k: v for k, v in best_params.items() if k not in ["C", "class_weight"]})
     clf.fit(x_train_val, y_train_val)
     y_pred = clf.predict(x_test)
 
