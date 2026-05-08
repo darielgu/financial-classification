@@ -1,16 +1,4 @@
-"""Random Forest classifier for financial transaction categorization.
-
-Usage
------
-    python -m src.random_forest
-
-This script:
-1. Loads the shared preprocessed train / val / test splits.
-2. Builds an sklearn Pipeline (TF-IDF + OHE + scaler → RandomForest).
-3. Tunes hyperparameters with RandomizedSearchCV on the training set only.
-4. Evaluates the best model on the held-out test set.
-5. Saves the fitted pipeline to models/random_forest.joblib.
-"""
+"""Train and evaluate the random forest model."""
 
 from __future__ import annotations
 
@@ -51,17 +39,11 @@ PARAM_DIST = {
 # ---------------------------------------------------------------------------
 
 def build_classifier() -> RandomForestClassifier:
-    """Return an unfitted RandomForestClassifier with sensible defaults.
-
-    Feature encoding and SMOTE oversampling are handled upstream by
-    get_data_for_model(), so only the classifier is needed here.
-    ``class_weight="balanced"`` is kept as a secondary guard against any
-    residual imbalance after SMOTE.
-    """
+    """Return an unfitted RandomForestClassifier with sensible defaults."""
     return RandomForestClassifier(
         class_weight="balanced",
         random_state=RANDOM_STATE,
-        n_jobs=-1,
+        n_jobs=1,
     )
 
 
@@ -82,7 +64,7 @@ def tune_classifier(
         scoring="f1_macro",
         cv=cv,
         random_state=RANDOM_STATE,
-        n_jobs=-1,
+        n_jobs=1,
         verbose=1,
         refit=True,
     )
@@ -101,26 +83,21 @@ def tune_classifier(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    # 1. Load data — transformer is fitted inside get_data_for_model
-    x_train, y_train, x_val, y_val, x_test, y_test, _ = get_data_for_model()
+    x_train, y_train, _x_val, _y_val, x_test, y_test, _ = get_data_for_model()
 
-    # 2. Build and tune classifier on the SMOTE-oversampled training set
     clf = build_classifier()
     best_clf = tune_classifier(clf, x_train, y_train)
 
-    # 3. Evaluate on the held-out test set (never seen during training/tuning)
     y_pred = best_clf.predict(x_test)
 
     metrics = compute_metrics(y_test, y_pred, model_name=MODEL_NAME)
     print_report(metrics)
     print_classification_report(y_test, y_pred)
 
-    # 4. Save the fitted classifier
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(best_clf, MODEL_PATH)
     print(f"Model saved to {MODEL_PATH}")
 
-    # 5. Save confusion matrix plot
     save_confusion_matrix(y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent)
 
 

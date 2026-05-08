@@ -15,7 +15,7 @@ def build_feature_transformer() -> ColumnTransformer:
     """Shared featurization for all models.
 
     Transformations applied:
-    - description_clean : TF-IDF (unigrams + bigrams, capped at 500 features)
+    - description_clean : TF-IDF with a larger n-gram vocabulary for transaction text
     - date_month, date_day_of_week : one-hot encoding (ignores unseen values)
     - amount : standard scaling (zero mean, unit variance)
 
@@ -30,7 +30,12 @@ def build_feature_transformer() -> ColumnTransformer:
         transformers=[
             (
                 "text_tfidf",
-                TfidfVectorizer(max_features=500, ngram_range=(1, 2)),
+                TfidfVectorizer(
+                    max_features=5000,
+                    ngram_range=(1, 3),
+                    min_df=2,
+                    sublinear_tf=True,
+                ),
                 DESCRIPTION_FEATURE,  # scalar str → 1-D Series, required by TfidfVectorizer
             ),
             (

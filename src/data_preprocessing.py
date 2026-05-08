@@ -28,6 +28,7 @@ CATEGORY_MAP = {
     "restaurants":   "Dining",
     "fast food":     "Dining",
     "food & dining": "Dining",
+    "coffee shops":  "Dining",
 
     # --- Entertainment consolidation ---
     # Merge Movies & DVDs, Television, and Music into "Entertainment".
@@ -46,6 +47,8 @@ CATEGORY_MAP = {
     # --- Other cross-dataset normalisations ---
     "rent":          "Mortgage & Rent",
     "utilities":     "Bills & Utilities",
+    "internet":      "Bills & Utilities",
+    "mobile phone":  "Bills & Utilities",
     "shopping":      "Shopping",
     "investment":    "Investment",
     "transportation":"Transportation",
