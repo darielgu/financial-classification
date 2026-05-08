@@ -4,9 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.metrics import f1_score
 from sklearn.svm import SVC, LinearSVC
+import scipy.sparse as sp
 
 from src.baseline import run_baseline_diagnostic
 from src.evaluate import (
@@ -117,11 +119,10 @@ def main() -> None:
     else:
         print(f"Kernel      : Linear")
 
-    # Retrain on combined train+val using SAME feature_transformer and SAME labels
-    train_val_df = pd.concat([train_df, val_df], ignore_index=True)
-    x_train_val_raw, _ = get_xy(train_val_df)
-    x_train_val = feature_transformer.transform(x_train_val_raw)  # Use existing transformer, don't refit
-    y_train_val = pd.concat([y_train, y_val], ignore_index=True)  # Use same label arrays (consistent encoding)
+    # Retrain on combined train+val using features we already have
+    import scipy.sparse as sp
+    x_train_val = sp.vstack([x_train, x_val]) if sp.issparse(x_train) else np.vstack([x_train, x_val])
+    y_train_val = pd.concat([y_train, y_val], ignore_index=True)
 
     clf = build_classifier(C=best_params["C"], class_weight="balanced", **{k: v for k, v in best_params.items() if k not in ["C", "class_weight"]})
     clf.fit(x_train_val, y_train_val)
