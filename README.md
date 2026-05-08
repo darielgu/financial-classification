@@ -57,22 +57,6 @@ python3 -m src.svm
 python3 -m src.logistic_regression
 ```
 
-### Colab Execution (Recommended)
-
-For best performance (no local CPU strain), use the **`notebooks/MODEL_COMPARISON.ipynb`** notebook:
-
-1. Upload to [Google Colab](https://colab.research.google.com)
-2. Run all cells to train all models and generate comparison analysis (~10-15 min)
-
-## Model Comparison
-
-See **`RESULTS.md`** for a detailed comparison of all three models:
-
-- Performance metrics (accuracy, precision, recall, F1-score)
-- Hyperparameter tuning details
-- Model trade-offs and recommendations
-- Per-category classification performance
-
 ## Shared Features
 
 All models use the same feature set:
