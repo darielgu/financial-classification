@@ -5,7 +5,12 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 DESCRIPTION_FEATURE = "description_clean"
-CATEGORICAL_FEATURES = ["date_month", "date_day_of_week", "transaction_type", "account_name"]
+CATEGORICAL_FEATURES = [
+    "date_month",
+    "date_day_of_week",
+    "transaction_type",
+    "account_name",
+]
 TEXT_LIKE_CATEGORICAL_FEATURES = [DESCRIPTION_FEATURE, *CATEGORICAL_FEATURES]
 NUMERIC_FEATURES = ["amount"]
 TARGET_COLUMN = "category"
@@ -15,28 +20,23 @@ def build_feature_transformer() -> ColumnTransformer:
     """Shared featurization for all models.
 
     Transformations applied:
-    - description_clean : TF-IDF with a larger n-gram vocabulary for transaction text
+    - description_clean : TF-IDF with improved n-grams and feature count
     - date_month, date_day_of_week : one-hot encoding (ignores unseen values)
     - amount : standard scaling (zero mean, unit variance)
 
-    NOTE: Fit this transformer on x_train only. Apply transform() to val and
-    test sets separately to avoid data leakage::
-
-        x_train_t = feature_transformer.fit_transform(x_train)
-        x_val_t   = feature_transformer.transform(x_val)
-        x_test_t  = feature_transformer.transform(x_test)
     """
     return ColumnTransformer(
         transformers=[
             (
                 "text_tfidf",
                 TfidfVectorizer(
-                    max_features=5000,
-                    ngram_range=(1, 3),
+                    max_features=10000,
+                    ngram_range=(1, 4),
                     min_df=2,
+                    max_df=0.95,
                     sublinear_tf=True,
                 ),
-                DESCRIPTION_FEATURE,  # scalar str → 1-D Series, required by TfidfVectorizer
+                DESCRIPTION_FEATURE,
             ),
             (
                 "categorical_one_hot",
