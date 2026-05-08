@@ -15,7 +15,7 @@ from src.evaluate import (
     print_report,
     save_confusion_matrix,
 )
-from src.model_data import load_processed_splits, prepare_features, get_xy
+from src.model_data import load_processed_splits, prepare_features
 
 MODEL_NAME = "SVM"
 MODEL_PATH = Path("models/svm.joblib")
@@ -115,10 +115,11 @@ def main() -> None:
     else:
         print(f"Kernel      : Linear")
 
-    # Retrain on combined train+val using SAME feature_transformer
+    # Retrain on combined train+val using SAME feature_transformer and SAME labels
     train_val_df = pd.concat([train_df, val_df], ignore_index=True)
-    x_train_val_raw, y_train_val = get_xy(train_val_df)
+    x_train_val_raw, _ = get_xy(train_val_df)
     x_train_val = feature_transformer.transform(x_train_val_raw)  # Use existing transformer, don't refit
+    y_train_val = pd.concat([y_train, y_val], ignore_index=True)  # Use same label arrays (consistent encoding)
 
     clf = build_classifier(C=best_params["C"], class_weight="balanced", **{k: v for k, v in best_params.items() if k != "C"})
     clf.fit(x_train_val, y_train_val)
