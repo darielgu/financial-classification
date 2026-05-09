@@ -1,0 +1,222 @@
+"""Train and evaluate the neural network (MLPClassifier) model.
+
+Pipeline:
+
+    sparse features (TF-IDF + OHE + scaled amount)
+        -> StandardScaler(with_mean=False)  # sparse-safe; equalize feature scales
+        -> RandomOverSampler (capped)       # mitigate imbalance, train-time only
+        -> MLPClassifier                    # adam + early stopping
+
+The whole pipeline is what gets dumped to disk, so the notebook can keep
+calling ``model.predict(x_test)`` against sparse features unchanged.
+"""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+import scipy.sparse as sp
+
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.pipeline import Pipeline as ImbPipeline
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+from sklearn.neural_network import MLPClassifier
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+from src.baseline import run_baseline_diagnostic
+from src.evaluate import (
+    compute_metrics,
+    print_classification_report,
+    print_report,
+    print_runtime_summary,
+    save_confusion_matrix,
+    save_learning_curve,
+)
+from src.model_data import get_data_for_model
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+MODEL_NAME = "Neural Network"
+MODEL_PATH = Path("models/neural_network.joblib")
+RANDOM_STATE = 42
+MINORITY_FLOOR = 200  # cap for capped-RandomOverSampler
+
+# Hyperparameter search space (note "mlp__" prefix routes into the pipeline step).
+# Tunes what the proposal called out -- layers and learning rate -- plus alpha
+# (L2) for regularization. Activation/batch_size held constant.
+PARAM_DIST = {
+    "mlp__hidden_layer_sizes": [(128,), (256,), (256, 128), (512, 256)],
+    "mlp__learning_rate_init": [1e-4, 5e-4, 1e-3, 5e-3],
+    "mlp__alpha":              [1e-4, 1e-3, 1e-2],
+}
+
+
+# ---------------------------------------------------------------------------
+# Wrapper: encode string labels to ints for MLPClassifier, decode on predict.
+#
+# Why: sklearn >= 1.5 MLPClassifier early-stopping path calls np.isnan(y_pred)
+# on raw class labels. With string categories ("Dining", ...) this raises
+# TypeError. Encoding y -> int sidesteps that bug while preserving the
+# string-label predict() interface the comparison notebook expects.
+# ---------------------------------------------------------------------------
+
+class LabelDecodingClassifier:
+    """Wrap a fitted classifier and decode integer predictions back to strings."""
+
+    def __init__(self, estimator, label_encoder: LabelEncoder):
+        self.estimator = estimator
+        self.label_encoder = label_encoder
+        self.classes_ = label_encoder.classes_
+
+    def predict(self, X):
+        y_pred_int = self.estimator.predict(X)
+        return self.label_encoder.inverse_transform(y_pred_int)
+
+    def predict_proba(self, X):
+        return self.estimator.predict_proba(X)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline building
+# ---------------------------------------------------------------------------
+
+def capped_sampling_strategy(y, cap: int = MINORITY_FLOOR) -> dict:
+    """Bring every class with fewer than ``cap`` samples up to ``cap``.
+
+    Majority classes are not touched. Returned dict is the
+    ``RandomOverSampler.sampling_strategy`` argument.
+    """
+    counts = pd.Series(y).value_counts()
+    return {cls: cap for cls, count in counts.items() if int(count) < cap}
+
+
+def build_pipeline(sampling_strategy) -> ImbPipeline:
+    """Build the scaler + capped oversampler + MLP pipeline.
+
+    ``RandomOverSampler`` is wrapped in ``imblearn.pipeline.Pipeline`` so
+    it only runs during ``fit`` (no leakage at predict time).
+    """
+    return ImbPipeline(
+        steps=[
+            ("scaler", StandardScaler(with_mean=False)),
+            ("ros", RandomOverSampler(
+                sampling_strategy=sampling_strategy,
+                random_state=RANDOM_STATE,
+            )),
+            (
+                "mlp",
+                MLPClassifier(
+                    solver="adam",
+                    max_iter=120,
+                    early_stopping=True,
+                    validation_fraction=0.1,
+                    n_iter_no_change=10,
+                    random_state=RANDOM_STATE,
+                ),
+            ),
+        ]
+    )
+
+
+def tune_pipeline(pipeline: ImbPipeline, x_train, y_train) -> dict:
+    """Run RandomizedSearchCV and return the best hyperparameter dict."""
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
+
+    search = RandomizedSearchCV(
+        estimator=pipeline,
+        param_distributions=PARAM_DIST,
+        n_iter=15,
+        scoring="f1_macro",
+        cv=cv,
+        random_state=RANDOM_STATE,
+        n_jobs=1,
+        verbose=2,
+        refit=False,
+    )
+
+    print("Running hyperparameter search (15 configs x 5-fold CV)...")
+    search.fit(x_train, y_train)
+
+    print(f"\nBest params : {search.best_params_}")
+    print(f"Best CV F1  : {search.best_score_:.4f}")
+
+    return search.best_params_
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    # Sparse splits (TF-IDF kept sparse through the scaler step).
+    x_train, y_train, x_val, y_val, x_test, y_test, _ = get_data_for_model(dense=False)
+
+    # Encode string categories to integers (works around sklearn >=1.5
+    # MLPClassifier early-stopping isnan-on-strings bug).
+    label_encoder = LabelEncoder()
+    label_encoder.fit(pd.concat([y_train, y_val, y_test], ignore_index=True))
+    y_train_enc = pd.Series(label_encoder.transform(y_train))
+    y_val_enc = pd.Series(label_encoder.transform(y_val))
+
+    # Stratified-random baseline floor for the report's discussion section.
+    # DummyClassifier needs dense inputs.
+    x_train_dense = x_train.toarray() if sp.issparse(x_train) else np.asarray(x_train)
+    x_test_dense = x_test.toarray() if sp.issparse(x_test) else np.asarray(x_test)
+    run_baseline_diagnostic(x_train_dense, y_train, x_test_dense, y_test)
+
+    # Compute capped sampling strategy from the train-fold-side reference;
+    # reused for both CV search and the final refit.
+    cv_strategy = capped_sampling_strategy(y_train_enc)
+    print(f"\nCapped oversampling strategy (cap={MINORITY_FLOOR}): "
+          f"{len(cv_strategy)} of {y_train_enc.nunique()} classes lifted")
+
+    pipeline = build_pipeline(cv_strategy)
+
+    t_search_start = time.perf_counter()
+    best_params = tune_pipeline(pipeline, x_train, y_train_enc)
+    search_elapsed = time.perf_counter() - t_search_start
+
+    # Refit best config on train+val.
+    if sp.issparse(x_train):
+        x_train_val = sp.vstack([x_train, x_val])
+    else:
+        x_train_val = np.vstack([x_train, x_val])
+    y_train_val_enc = pd.concat([y_train_enc, y_val_enc], ignore_index=True)
+
+    refit_strategy = capped_sampling_strategy(y_train_val_enc)
+    final_pipeline = build_pipeline(refit_strategy)
+    final_pipeline.set_params(**best_params)
+
+    print("\nRefitting best config on train+val...")
+    t_refit_start = time.perf_counter()
+    final_pipeline.fit(x_train_val, y_train_val_enc)
+    refit_elapsed = time.perf_counter() - t_refit_start
+
+    mlp = final_pipeline.named_steps["mlp"]
+    print(f"Refit completed in {refit_elapsed:.1f}s over {mlp.n_iter_} epochs.")
+
+    final = LabelDecodingClassifier(final_pipeline, label_encoder)
+    y_pred = final.predict(x_test)
+
+    metrics = compute_metrics(y_test, y_pred, model_name=MODEL_NAME)
+    print_report(metrics)
+    print_classification_report(y_test, y_pred)
+
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(final, MODEL_PATH)
+    print(f"Model saved to {MODEL_PATH}")
+
+    save_confusion_matrix(
+        y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent
+    )
+    save_learning_curve(mlp, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent)
+    print_runtime_summary(search_elapsed, refit_elapsed)
+
+
+if __name__ == "__main__":
+    main()
