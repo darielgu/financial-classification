@@ -22,6 +22,7 @@ financial-classification/
     ├── featurization.py
     ├── logistic_regression.py
     ├── model_data.py
+    ├── neural_network.py
     ├── random_forest.py
     └── svm.py
 ```
@@ -55,6 +56,7 @@ This creates the shared dataset splits used by every model:
 python3 -m src.random_forest
 python3 -m src.svm
 python3 -m src.logistic_regression
+python3 -m src.neural_network
 ```
 
 ## Shared Features
@@ -73,5 +75,6 @@ The preprocessing script also normalizes category names, removes duplicates, and
 
 - **Data Preprocessing & Evaluation**: Team
 - **SVM Implementation**: Dariel Gutierrez
-- **Random Forest Implementation**: Team
-- **Logistic Regression**: Team
+- **Random Forest Implementation**: Bradley Mustoe
+- **Logistic Regression**: Joshua Sherrod
+- **Neural Network**: Zander Barajas
