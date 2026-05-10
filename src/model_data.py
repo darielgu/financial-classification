@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Iterable, Tuple
 
@@ -16,8 +17,12 @@ from src.featurization import (
 )
 
 
+VARIANT = os.environ.get("VARIANT", "full")
+DEFAULT_PROCESSED_DIR = Path(f"data/processed_{VARIANT}")
+
+
 def load_processed_splits(
-    processed_dir: Path = Path("data/processed"),
+    processed_dir: Path = DEFAULT_PROCESSED_DIR,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     train = pd.read_csv(processed_dir / "train.csv", parse_dates=["date"])
     val = pd.read_csv(processed_dir / "val.csv", parse_dates=["date"])
@@ -64,7 +69,7 @@ def prepare_features(
 
 
 def get_data_for_model(
-    processed_dir: Path = Path("data/processed"),
+    processed_dir: Path = DEFAULT_PROCESSED_DIR,
     *,
     dense: bool = True,
 ) -> Tuple[np.ndarray, pd.Series, np.ndarray, pd.Series, np.ndarray, pd.Series, ColumnTransformer]:

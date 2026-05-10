@@ -1,6 +1,7 @@
 # DARIELS PART
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import joblib
@@ -19,8 +20,9 @@ from src.evaluate import (
 )
 from src.model_data import load_processed_splits, prepare_features
 
+VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "SVM"
-MODEL_PATH = Path("models/svm.joblib")
+MODEL_PATH = Path(f"models/{VARIANT}/svm.joblib")
 
 # Expanded hyperparameter grid with RBF kernel option
 PARAM_GRID_LINEAR = [

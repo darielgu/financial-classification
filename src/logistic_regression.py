@@ -1,16 +1,18 @@
+import os
 from pathlib import Path
 import joblib
 from sklearn.linear_model import LogisticRegression
 from src.evaluate import compute_metrics, print_report, print_report, print_classification_report, save_confusion_matrix
 from src.model_data import get_data_for_model
 
-""" 
+"""
 RUN python3.14 -m src.logistic_regression
 """
 
 # Constants to identify model and storage
+VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "logistic_regression"
-MODEL_PATH = Path("models/logistic_regression.joblib")
+MODEL_PATH = Path(f"models/{VARIANT}/logistic_regression.joblib")
 
 
 def main():

@@ -142,16 +142,66 @@ def standardize_schema(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def combine_and_preprocess(path_one: Path, path_two: Path) -> pd.DataFrame:
-    df1 = standardize_schema(load_dataset_one(path_one))
-    df2 = standardize_schema(load_dataset_two(path_two))
-    combined = pd.concat([df1, df2], ignore_index=True)
+VARIANTS = ("full", "d1", "d2", "d2_clean")
+
+
+def combine_and_preprocess(
+    path_one: Path,
+    path_two: Path,
+    variant: str = "full",
+) -> pd.DataFrame:
+    """Load + standardize + dedupe; optionally drop D1 and/or denoise D2.
+
+    Variants:
+      - full     : load both datasets (D1 = Personal_Finance_Dataset.csv,
+                   D2 = aug_personal_transactions_with_UserId.csv).
+      - d1       : load only D1 (Faker-generated descriptions, clean labels).
+      - d2       : load only D2 (real descriptions, noisy labels).
+      - d2_clean : load only D2 then keep rows whose category equals the
+                   modal category for that description_clean (mitigates D2's
+                   augmentation-introduced label noise).
+    """
+    if variant not in VARIANTS:
+        raise ValueError(f"Unknown variant {variant!r}; expected one of {VARIANTS}.")
+
+    if variant == "full":
+        df1 = standardize_schema(load_dataset_one(path_one))
+        df2 = standardize_schema(load_dataset_two(path_two))
+        combined = pd.concat([df1, df2], ignore_index=True)
+    elif variant == "d1":
+        combined = standardize_schema(load_dataset_one(path_one))
+    else:  # d2 or d2_clean
+        combined = standardize_schema(load_dataset_two(path_two))
+
     combined = combined.drop_duplicates(
         subset=["date", "description_clean", "amount", "category"],
         keep="first",
     )
+
+    if variant == "d2_clean":
+        combined = _denoise_modal_category(combined)
+
     combined = combined.sort_values(["date", "description_clean"]).reset_index(drop=True)
     return combined
+
+
+def _denoise_modal_category(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep rows whose category matches the modal category for their description.
+
+    For each unique description_clean, find the most-frequent category among
+    labeled rows; drop rows where the row's category disagrees with that modal.
+    Unlabeled rows (category NaN) are passed through unchanged -- they get
+    filtered later by make_splits anyway.
+    """
+    labeled = df[df["category"].notna()].copy()
+    modal = labeled.groupby("description_clean")["category"].agg(
+        lambda s: s.mode().iloc[0]
+    )
+    labeled["_modal"] = labeled["description_clean"].map(modal)
+    labeled = labeled[labeled["category"] == labeled["_modal"]].drop(columns="_modal")
+
+    unlabeled = df[df["category"].isna()]
+    return pd.concat([labeled, unlabeled], ignore_index=True)
 
 
 def make_splits(df: pd.DataFrame, seed: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -206,22 +256,36 @@ def parse_args() -> argparse.Namespace:
         description="Combine two transaction CSVs and create one shared preprocessed dataset for all models."
     )
     parser.add_argument(
+        "--variant",
+        choices=VARIANTS,
+        default="full",
+        help=(
+            "Preprocessing variant: 'full' (D1+D2, baseline), "
+            "'d1' (Faker-only D1, clean labels), "
+            "'d2' (D2 only -- drops Faker-text D1), "
+            "'d2_clean' (D2 only + modal-category denoising)."
+        ),
+    )
+    parser.add_argument(
         "--dataset-one",
         type=Path,
         default=Path("data/Personal_Finance_Dataset.csv"),
-        help="Path to Personal_Finance_Dataset.csv",
+        help="Path to Personal_Finance_Dataset.csv (used by --variant full).",
     )
     parser.add_argument(
         "--dataset-two",
         type=Path,
         default=Path("data/aug_personal_transactions_with_UserId.csv"),
-        help="Path to aug_personal_transactions_with_UserId.csv",
+        help="Path to aug_personal_transactions_with_UserId.csv.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("data/processed"),
-        help="Directory where preprocessed outputs are written.",
+        default=None,
+        help=(
+            "Directory where preprocessed outputs are written. "
+            "Defaults to data/processed_<variant>/."
+        ),
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed for split reproducibility.")
     return parser.parse_args()
@@ -229,12 +293,15 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    combined = combine_and_preprocess(args.dataset_one, args.dataset_two)
-    save_outputs(combined, args.output_dir, seed=args.seed)
+    output_dir = args.output_dir or Path(f"data/processed_{args.variant}")
 
-    print(f"Combined rows: {len(combined):,}")
+    combined = combine_and_preprocess(args.dataset_one, args.dataset_two, variant=args.variant)
+    save_outputs(combined, output_dir, seed=args.seed)
+
+    print(f"Variant          : {args.variant}")
+    print(f"Combined rows    : {len(combined):,}")
     print(f"Unique categories: {combined['category'].nunique()}")
-    print(f"Saved outputs to: {args.output_dir}")
+    print(f"Saved outputs to : {output_dir}")
 
 
 if __name__ == "__main__":

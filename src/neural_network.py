@@ -13,6 +13,7 @@ calling ``model.predict(x_test)`` against sparse features unchanged.
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -41,8 +42,9 @@ from src.model_data import get_data_for_model
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
+VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "Neural Network"
-MODEL_PATH = Path("models/neural_network.joblib")
+MODEL_PATH = Path(f"models/{VARIANT}/neural_network.joblib")
 RANDOM_STATE = 42
 MINORITY_FLOOR = 200  # cap for capped-RandomOverSampler
 

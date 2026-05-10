@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import joblib
@@ -19,8 +20,9 @@ from src.model_data import get_data_for_model
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
+VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "Random Forest"
-MODEL_PATH = Path("models/random_forest.joblib")
+MODEL_PATH = Path(f"models/{VARIANT}/random_forest.joblib")
 RANDOM_STATE = 42
 
 # Hyperparameter search space
