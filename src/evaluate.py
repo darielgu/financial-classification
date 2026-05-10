@@ -1,8 +1,4 @@
-"""Evaluation helpers shared by every model script.
-
-Provides metric computation, console reporting, confusion-matrix and
-learning-curve plotting, and a runtime summary block.
-"""
+"""Evaluation helpers shared by every model script."""
 
 from __future__ import annotations
 
@@ -101,9 +97,8 @@ def save_learning_curve(
 ) -> None:
     """Save a training-loss + validation-accuracy curve PNG.
 
-    Works with any estimator exposing ``loss_curve_`` (and optionally
-    ``validation_scores_``) — e.g. ``MLPClassifier`` with ``early_stopping=True``.
-    No-op if matplotlib is missing or the estimator has no recorded loss.
+    Works with estimators exposing ``loss_curve_`` (and optionally
+    ``validation_scores_``); no-op if matplotlib is missing or no loss recorded.
     """
     if not _MATPLOTLIB_AVAILABLE:
         print("matplotlib not installed — skipping learning curve plot.")

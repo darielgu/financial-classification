@@ -1,9 +1,4 @@
-"""Variant-aware loaders that materialize features for any model script.
-
-``DEFAULT_PROCESSED_DIR`` is derived from the ``VARIANT`` environment
-variable (default ``"full"``), so every model script picks up the same
-processed splits without knowing the variant explicitly.
-"""
+"""Variant-aware loaders that materialize features for model scripts."""
 
 from __future__ import annotations
 

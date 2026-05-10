@@ -2,15 +2,10 @@
 
 Run as a module: ``python -m src.data_preprocessing --variant <V>``.
 
-Steps:
-1. Load the raw CSV(s) selected by ``--variant`` (D1 only / D2 only / both).
-2. Standardize the schema, normalize categories via ``CATEGORY_MAP``,
-   drop rows with unparseable date or amount, and dedupe.
-3. For ``--variant d2_clean`` only, apply modal-category denoising
-   (keep rows whose label matches the modal label for their description).
-4. Stratified 64/16/20 train/val/test split by category.
-5. Write splits to ``data/processed_<variant>/`` plus a feature-columns
-   metadata file.
+Loads the raw CSVs selected by ``--variant``, standardizes the schema,
+normalizes labels via ``CATEGORY_MAP``, dedupes, optionally denoises
+(``d2_clean``), then writes a stratified 64/16/20 train/val/test split
+to ``data/processed_<variant>/``.
 """
 
 from __future__ import annotations
@@ -197,11 +192,9 @@ def combine_and_preprocess(
 
 
 def _denoise_modal_category(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep rows whose category matches the modal category for their description.
+    """Drop rows whose category disagrees with the modal category for their description.
 
-    For each unique ``description_clean``, drop rows whose category disagrees
-    with the most-frequent label among labeled rows. Unlabeled rows pass
-    through unchanged — ``make_splits`` filters them anyway.
+    Unlabeled rows pass through; ``make_splits`` filters them later.
     """
     labeled = df[df["category"].notna()].copy()
     modal = labeled.groupby("description_clean")["category"].agg(

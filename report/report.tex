@@ -410,13 +410,14 @@ Table~\ref{tab:runtime} reports inference time on the full $2{,}457$-row
 test set (single CPU thread) and end-to-end training time (search + refit)
 for each model on the \texttt{full} variant. Inference is sub-$25$~ms for
 every model, so it is not a discriminator at this scale. Training cost is
-dominated by the hyperparameter-search budget and splits into two tiers:
-the linear models, which run a small grid (SVM tests $8$ configurations on
-the validation set; LR tests $4$ configurations under 5-fold CV), and the
-search-heavy models, which run $20$ ($\text{RF}$) or $15$ ($\text{NN}$)
-random samples under 5-fold CV. SVM is fastest because \texttt{LinearSVC}
-fits in a fraction of a second on this $\sim$$10$k-feature input and the
-search avoids cross-validation entirely.
+dominated by the hyperparameter-search budget. SVM is the clear outlier
+on the fast end (under $10$~s) because it skips cross-validation and
+\texttt{LinearSVC} fits in a fraction of a second on this
+$\sim$$10$k-feature input. The other three models all run 5-fold CV and
+take several minutes: LR tests $4$ regularization values ($20$ fits +
+final refit), RF samples $20$ configurations ($100$ fits), and the NN
+samples $15$ configurations ($75$ fits) on top of the imbalance-mitigation
+pipeline.
 
 \begin{table}[!htbp]
 \centering
@@ -428,8 +429,8 @@ thread.}
 \toprule
 Model & Inference (s, full test) & Training (s) \\
 \midrule
-Logistic Regression & 0.002 & $25$ \\
-SVM                 & 0.001 & $8$ \\
+Logistic Regression & 0.002 & $173$ \\
+SVM                 & 0.001 & $7$ \\
 Random Forest       & 0.021 & $266$ \\
 Neural Network      & 0.009 & $308$ ($304$ search + $4$ refit) \\
 \bottomrule

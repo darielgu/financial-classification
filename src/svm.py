@@ -1,11 +1,8 @@
 """Train and evaluate the SVM model.
 
-Tunes ``C`` via a manual validation-set grid search over ``LinearSVC``.
-Best config is refit on train+val before final test prediction.
-
-An RBF-kernel grid is kept as reference but disabled by default — RBF
-is too slow for the ~10k-feature TF-IDF input, and ``LinearSVC`` matches
-or beats it in practice.
+An RBF kernel grid is included but disabled by ``USE_RBF_KERNEL`` because
+RBF is too slow on the ~10k-feature TF-IDF input and ``LinearSVC`` matches
+it in practice.
 """
 
 from __future__ import annotations

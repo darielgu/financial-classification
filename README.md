@@ -1,6 +1,6 @@
 # Financial Classification
 
-CS 549 (Machine Learning, Spring 2026) project on classifying personal financial transactions into categories (Dining, Groceries, Mortgage & Rent, Entertainment, Income, ...).
+Final project for CS 549 (Machine Learning, Spring 2026). We train and compare four classical supervised models on the task of sorting personal financial transactions into spending categories such as Dining, Groceries, Mortgage & Rent, Entertainment, and Income.
 
 ## Project Team
 

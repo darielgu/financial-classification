@@ -1,8 +1,4 @@
-"""Shared feature transformer used by every model script.
-
-Defines a single ``ColumnTransformer`` over the cleaned transaction fields
-so every model trains and evaluates on identical features.
-"""
+"""Shared ``ColumnTransformer`` used by every model script."""
 
 from __future__ import annotations
 

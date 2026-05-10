@@ -1,8 +1,4 @@
-"""Train and evaluate the random forest model.
-
-Tunes the standard tree knobs via ``RandomizedSearchCV`` (5-fold,
-macro-F1, 20 iterations) and saves the best estimator.
-"""
+"""Train and evaluate the random forest model."""
 
 from __future__ import annotations
 

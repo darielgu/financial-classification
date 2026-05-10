@@ -1,14 +1,7 @@
-"""Train and evaluate the neural network (MLPClassifier) model.
+"""Train and evaluate the neural network (MLPClassifier).
 
-Pipeline::
-
-    sparse features (TF-IDF + OHE + scaled amount)
-        -> StandardScaler(with_mean=False)   # sparse-safe; equalize feature scales
-        -> RandomOverSampler (capped)        # mitigate class imbalance, train-time only
-        -> MLPClassifier                     # adam + early stopping
-
-The full pipeline is dumped to disk so the comparison notebook can keep
-calling ``model.predict(x_test)`` against sparse features unchanged.
+Pipeline: ``StandardScaler`` (sparse-safe) -> capped ``RandomOverSampler``
+-> ``MLPClassifier`` (adam + early stopping).
 """
 
 from __future__ import annotations
@@ -43,11 +36,9 @@ from src.model_data import get_data_for_model
 MODEL_NAME = "Neural Network"
 MODEL_FILENAME = "neural_network.joblib"
 RANDOM_STATE = 42
-MINORITY_FLOOR = 200  # cap for the capped RandomOverSampler
+MINORITY_FLOOR = 200  # minimum samples per class after oversampling
 
-# Tuning surface: layers and learning rate (named in the proposal) plus alpha
-# (L2) for regularization. Activation and batch_size are held constant.
-# The ``mlp__`` prefix routes parameters into the MLP step of the pipeline.
+# The ``mlp__`` prefix targets the MLP step inside the pipeline.
 PARAM_DIST = {
     "mlp__hidden_layer_sizes": [(128,), (256,), (256, 128), (512, 256)],
     "mlp__learning_rate_init": [1e-4, 5e-4, 1e-3, 5e-3],
@@ -56,13 +47,11 @@ PARAM_DIST = {
 
 
 class LabelDecodingClassifier:
-    """Wrap a fitted classifier and decode integer predictions back to strings.
+    """Wrap a fitted classifier so ``predict()`` returns string labels.
 
-    sklearn >= 1.5 ``MLPClassifier``'s early-stopping path calls
-    ``np.isnan(y_pred)`` on raw class labels, which raises ``TypeError`` on
-    string-typed ``y``. Encoding ``y`` to ints sidesteps the bug while
-    preserving the string-label ``predict()`` interface the comparison
-    notebook expects.
+    Works around an sklearn >= 1.5 bug where MLP early-stopping calls
+    ``np.isnan()`` on string ``y``: we encode to ints during fit and
+    decode at predict time.
     """
 
     def __init__(self, estimator, label_encoder: LabelEncoder):
@@ -85,11 +74,7 @@ def capped_sampling_strategy(y, cap: int = MINORITY_FLOOR) -> dict:
 
 
 def build_pipeline(sampling_strategy) -> ImbPipeline:
-    """Build the scaler + capped oversampler + MLP pipeline.
-
-    ``RandomOverSampler`` is wrapped in ``imblearn.pipeline.Pipeline`` so it
-    only runs during ``fit`` (no leakage at predict time).
-    """
+    """Build the scaler + capped oversampler + MLP pipeline."""
     return ImbPipeline(
         steps=[
             ("scaler", StandardScaler(with_mean=False)),
@@ -152,8 +137,7 @@ def main() -> None:
         processed_dir=processed_dir, dense=False
     )
 
-    # Encode string categories to ints; works around the sklearn >=1.5 MLP
-    # early-stopping isnan-on-strings bug. See LabelDecodingClassifier.
+    # Encode string labels to ints (see LabelDecodingClassifier).
     label_encoder = LabelEncoder()
     label_encoder.fit(pd.concat([y_train, y_val, y_test], ignore_index=True))
     y_train_enc = pd.Series(label_encoder.transform(y_train))

@@ -1,8 +1,4 @@
-"""Stratified DummyClassifier diagnostic.
-
-Provides a per-class-prior random baseline so model scripts can show
-that observed F1 is driven by the model rather than guessing the prior.
-"""
+"""Stratified DummyClassifier baseline (per-class-prior random)."""
 
 from __future__ import annotations
 

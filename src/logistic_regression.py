@@ -1,8 +1,4 @@
-"""Train and evaluate the logistic regression model.
-
-Tunes the regularization strength ``C`` via ``GridSearchCV`` (5-fold,
-macro-F1). Best config is refit on train+val before final test prediction.
-"""
+"""Train and evaluate the logistic regression model."""
 
 from __future__ import annotations
 
