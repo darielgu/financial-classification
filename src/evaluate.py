@@ -1,7 +1,12 @@
+"""Evaluation helpers shared by every model script.
+
+Provides metric computation, console reporting, confusion-matrix and
+learning-curve plotting, and a runtime summary block.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 from sklearn.metrics import (
@@ -25,22 +30,8 @@ def compute_metrics(
     y_true,
     y_pred,
     model_name: str = "model",
-) -> Dict[str, float]:
-    """Compute accuracy, macro precision/recall/F1 and return as a dict.
-
-    Parameters
-    ----------
-    y_true : array-like
-        Ground-truth category labels.
-    y_pred : array-like
-        Predicted category labels from the model.
-    model_name : str
-        Label used as the ``model`` key in the returned dict.
-
-    Returns
-    -------
-    dict with keys: model, accuracy, precision_macro, recall_macro, f1_macro
-    """
+) -> dict[str, float]:
+    """Return accuracy and macro precision/recall/F1 keyed by metric name."""
     return {
         "model": model_name,
         "accuracy": round(accuracy_score(y_true, y_pred), 4),
@@ -56,8 +47,8 @@ def compute_metrics(
     }
 
 
-def print_report(metrics: Dict[str, float]) -> None:
-    """Pretty-print the metrics dict returned by compute_metrics."""
+def print_report(metrics: dict[str, float]) -> None:
+    """Pretty-print the metrics dict returned by ``compute_metrics``."""
     model = metrics.get("model", "unknown")
     print(f"\n{'=' * 50}")
     print(f"  Results: {model}")
@@ -70,7 +61,7 @@ def print_report(metrics: Dict[str, float]) -> None:
 
 
 def print_classification_report(y_true, y_pred) -> None:
-    """Print sklearn's per-class precision / recall / F1 table."""
+    """Print sklearn's per-class precision/recall/F1 table."""
     print(classification_report(y_true, y_pred, zero_division=0))
 
 
@@ -80,21 +71,7 @@ def save_confusion_matrix(
     model_name: str = "model",
     output_dir: Path = Path("models"),
 ) -> None:
-    """Save a confusion matrix heatmap as a PNG file.
-
-    Requires matplotlib. Silently skips if matplotlib is not installed.
-
-    Parameters
-    ----------
-    y_true : array-like
-        Ground-truth labels.
-    y_pred : array-like
-        Predicted labels.
-    model_name : str
-        Used in the plot title and output filename.
-    output_dir : Path
-        Directory where the PNG is saved.
-    """
+    """Save a confusion-matrix heatmap as a PNG; no-op if matplotlib is missing."""
     if not _MATPLOTLIB_AVAILABLE:
         print("matplotlib not installed — skipping confusion matrix plot.")
         return
@@ -122,21 +99,20 @@ def save_learning_curve(
     model_name: str = "model",
     output_dir: Path = Path("models"),
 ) -> None:
-    """Save a learning-curve PNG: training loss + validation accuracy per epoch.
+    """Save a training-loss + validation-accuracy curve PNG.
 
     Works with any estimator exposing ``loss_curve_`` (and optionally
-    ``validation_scores_``) -- e.g. ``MLPClassifier`` fit with
-    ``early_stopping=True``. Silently skips if matplotlib isn't installed
-    or the estimator hasn't recorded a loss curve.
+    ``validation_scores_``) — e.g. ``MLPClassifier`` with ``early_stopping=True``.
+    No-op if matplotlib is missing or the estimator has no recorded loss.
     """
     if not _MATPLOTLIB_AVAILABLE:
-        print("matplotlib not installed -- skipping learning curve plot.")
+        print("matplotlib not installed — skipping learning curve plot.")
         return
 
     loss = getattr(estimator, "loss_curve_", None)
     val_scores = getattr(estimator, "validation_scores_", None)
     if not loss:
-        print(f"{model_name} has no loss_curve_ -- skipping learning curve plot.")
+        print(f"{model_name} has no loss_curve_ — skipping learning curve plot.")
         return
 
     output_dir = Path(output_dir)
@@ -160,7 +136,7 @@ def save_learning_curve(
         ax_acc.set_ylabel("Validation accuracy", color="tab:orange")
         ax_acc.tick_params(axis="y", labelcolor="tab:orange")
 
-    fig.suptitle(f"Learning Curve -- {model_name}", fontsize=14)
+    fig.suptitle(f"Learning Curve — {model_name}", fontsize=14)
     fig.tight_layout()
     out_path = output_dir / f"{model_name.lower().replace(' ', '_')}_learning_curve.png"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -169,7 +145,7 @@ def save_learning_curve(
 
 
 def print_runtime_summary(search_time: float, refit_time: float) -> None:
-    """Print a runtime block for the rubric's Runtime Analysis item."""
+    """Print a runtime block for the report's runtime-analysis section."""
     total = search_time + refit_time
     print("\n" + "=" * 50)
     print("  Runtime")

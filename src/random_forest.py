@@ -1,7 +1,12 @@
-"""Train and evaluate the random forest model."""
+"""Train and evaluate the random forest model.
+
+Tunes the standard tree knobs via ``RandomizedSearchCV`` (5-fold,
+macro-F1, 20 iterations) and saves the best estimator.
+"""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import joblib
@@ -16,14 +21,11 @@ from src.evaluate import (
 )
 from src.model_data import get_data_for_model
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "Random Forest"
-MODEL_PATH = Path("models/random_forest.joblib")
+MODEL_PATH = Path(f"models/{VARIANT}/random_forest.joblib")
 RANDOM_STATE = 42
 
-# Hyperparameter search space
 PARAM_DIST = {
     "n_estimators": [100, 200, 300, 500],
     "max_depth": [None, 10, 20, 30],
@@ -34,12 +36,8 @@ PARAM_DIST = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Model building
-# ---------------------------------------------------------------------------
-
 def build_classifier() -> RandomForestClassifier:
-    """Return an unfitted RandomForestClassifier with sensible defaults."""
+    """Return an unfitted RandomForestClassifier with class-balanced weighting."""
     return RandomForestClassifier(
         class_weight="balanced",
         random_state=RANDOM_STATE,
@@ -50,13 +48,8 @@ def build_classifier() -> RandomForestClassifier:
 def tune_classifier(
     clf: RandomForestClassifier, x_train, y_train
 ) -> RandomForestClassifier:
-    """Run RandomizedSearchCV over PARAM_DIST and return the best estimator.
-
-    Uses stratified 5-fold CV scored by macro-F1 (appropriate for
-    multi-class problems with potential class imbalance).
-    """
+    """Randomized search over ``PARAM_DIST`` with 5-fold stratified CV scored by macro-F1."""
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
-
     search = RandomizedSearchCV(
         estimator=clf,
         param_distributions=PARAM_DIST,
@@ -68,19 +61,12 @@ def tune_classifier(
         verbose=1,
         refit=True,
     )
-
     print("Running hyperparameter search (this may take a few minutes)...")
     search.fit(x_train, y_train)
-
     print(f"\nBest params : {search.best_params_}")
     print(f"Best CV F1  : {search.best_score_:.4f}")
-
     return search.best_estimator_
 
-
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     x_train, y_train, _x_val, _y_val, x_test, y_test, _ = get_data_for_model()

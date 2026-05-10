@@ -1,14 +1,24 @@
-# DARIELS PART
+"""Train and evaluate the SVM model.
+
+Tunes ``C`` via a manual validation-set grid search over ``LinearSVC``.
+Best config is refit on train+val before final test prediction.
+
+An RBF-kernel grid is kept as reference but disabled by default — RBF
+is too slow for the ~10k-feature TF-IDF input, and ``LinearSVC`` matches
+or beats it in practice.
+"""
+
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 from sklearn.metrics import f1_score
 from sklearn.svm import SVC, LinearSVC
-import scipy.sparse as sp
 
 from src.baseline import run_baseline_diagnostic
 from src.evaluate import (
@@ -19,10 +29,12 @@ from src.evaluate import (
 )
 from src.model_data import load_processed_splits, prepare_features
 
+VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "SVM"
-MODEL_PATH = Path("models/svm.joblib")
+MODEL_PATH = Path(f"models/{VARIANT}/svm.joblib")
+RANDOM_STATE = 42
 
-# Expanded hyperparameter grid with RBF kernel option
+# LinearSVC: tune regularization strength C only.
 PARAM_GRID_LINEAR = [
     {"C": 0.01, "class_weight": "balanced"},
     {"C": 0.05, "class_weight": "balanced"},
@@ -34,6 +46,7 @@ PARAM_GRID_LINEAR = [
     {"C": 10.0, "class_weight": "balanced"},
 ]
 
+# RBF SVC: kept for reference, disabled by USE_RBF_KERNEL below.
 PARAM_GRID_RBF = [
     {"C": 0.1, "gamma": "scale"},
     {"C": 0.5, "gamma": "scale"},
@@ -45,40 +58,38 @@ PARAM_GRID_RBF = [
     {"C": 1.0, "gamma": "auto"},
 ]
 
-USE_RBF_KERNEL = False  # RBF is too slow for 10k features; LinearSVC is much faster
+USE_RBF_KERNEL = False
 
 
 def build_classifier(
     *, C: float, class_weight: str | None = None, **kwargs
 ) -> LinearSVC | SVC:
-    """Build LinearSVC or RBF SVC based on USE_RBF_KERNEL flag."""
+    """Build LinearSVC or RBF SVC depending on the USE_RBF_KERNEL flag."""
     if USE_RBF_KERNEL:
         return SVC(
             kernel="rbf",
             C=C,
             class_weight=class_weight,
             gamma=kwargs.get("gamma", "scale"),
-            random_state=42,
+            random_state=RANDOM_STATE,
             probability=True,
         )
-    else:
-        return LinearSVC(
-            C=C,
-            class_weight=class_weight,
-            dual="auto",
-            max_iter=10000,
-            random_state=42,
-        )
+    return LinearSVC(
+        C=C,
+        class_weight=class_weight,
+        dual="auto",
+        max_iter=10000,
+        random_state=RANDOM_STATE,
+    )
 
 
 def tune_with_validation(x_train, y_train, x_val, y_val) -> dict:
-    """Tune SVM hyperparameters on validation set."""
+    """Grid search over the active param grid; pick best macro-F1 on val."""
     param_grid = PARAM_GRID_RBF if USE_RBF_KERNEL else PARAM_GRID_LINEAR
     best_result: dict | None = None
 
     for params in param_grid:
-        # Extract only kernel-specific params (exclude C and class_weight which we handle separately)
-        kwargs = {k: v for k, v in params.items() if k not in ["C", "class_weight"]}
+        kwargs = {k: v for k, v in params.items() if k not in ("C", "class_weight")}
         clf = build_classifier(C=params["C"], class_weight="balanced", **kwargs)
         clf.fit(x_train, y_train)
         y_val_pred = clf.predict(x_val)
@@ -92,39 +103,32 @@ def tune_with_validation(x_train, y_train, x_val, y_val) -> dict:
     return best_result
 
 
-
-
 def main() -> None:
     train_df, val_df, test_df = load_processed_splits()
 
     x_train, y_train, transformed, feature_transformer = prepare_features(
-        train_df,
-        [val_df, test_df],
-        dense=True,
+        train_df, [val_df, test_df], dense=True,
     )
     (x_val, y_val), (x_test, y_test) = transformed
 
-    # Run baseline diagnostic
     run_baseline_diagnostic(x_train, y_train, x_test, y_test)
 
-    # Tune hyperparameters
     best_result = tune_with_validation(x_train, y_train, x_val, y_val)
     best_params = best_result["params"]
 
     print("Validation tuning results")
     print(f"Best params : {best_params}")
     print(f"Best val F1 : {best_result['score']:.4f}")
-    if USE_RBF_KERNEL:
-        print(f"Kernel      : RBF")
-    else:
-        print(f"Kernel      : Linear")
+    print(f"Kernel      : {'RBF' if USE_RBF_KERNEL else 'Linear'}")
 
-    # Retrain on combined train+val using features we already have
-    import scipy.sparse as sp
-    x_train_val = sp.vstack([x_train, x_val]) if sp.issparse(x_train) else np.vstack([x_train, x_val])
+    if sp.issparse(x_train):
+        x_train_val = sp.vstack([x_train, x_val])
+    else:
+        x_train_val = np.vstack([x_train, x_val])
     y_train_val = pd.concat([y_train, y_val], ignore_index=True)
 
-    clf = build_classifier(C=best_params["C"], class_weight="balanced", **{k: v for k, v in best_params.items() if k not in ["C", "class_weight"]})
+    kwargs = {k: v for k, v in best_params.items() if k not in ("C", "class_weight")}
+    clf = build_classifier(C=best_params["C"], class_weight="balanced", **kwargs)
     clf.fit(x_train_val, y_train_val)
     y_pred = clf.predict(x_test)
 
@@ -139,7 +143,6 @@ def main() -> None:
     save_confusion_matrix(
         y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent
     )
-
 
 
 if __name__ == "__main__":

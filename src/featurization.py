@@ -1,3 +1,9 @@
+"""Shared feature transformer used by every model script.
+
+Defines a single ``ColumnTransformer`` over the cleaned transaction fields
+so every model trains and evaluates on identical features.
+"""
+
 from __future__ import annotations
 
 from sklearn.compose import ColumnTransformer
@@ -17,13 +23,12 @@ TARGET_COLUMN = "category"
 
 
 def build_feature_transformer() -> ColumnTransformer:
-    """Shared featurization for all models.
+    """Build the shared ColumnTransformer.
 
-    Transformations applied:
-    - description_clean : TF-IDF with improved n-grams and feature count
-    - date_month, date_day_of_week : one-hot encoding (ignores unseen values)
-    - amount : standard scaling (zero mean, unit variance)
-
+    - ``description_clean`` — TF-IDF (1-4 grams, sublinear, max 10k features)
+    - ``date_month``, ``date_day_of_week``, ``transaction_type``,
+      ``account_name`` — one-hot encoding (ignores unseen values)
+    - ``amount`` — standard scaling (zero mean, unit variance)
     """
     return ColumnTransformer(
         transformers=[
