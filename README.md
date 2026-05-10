@@ -4,11 +4,11 @@ CS 549 (Machine Learning, Spring 2026) project on classifying personal financial
 
 ## Project Team
 
-- **Joshua Sherrod** — Logistic Regression
-- **Bradley Mustoe** — Random Forest
-- **Dariel Gutierrez** — Support Vector Machine
-- **Zander Barajas** — Neural Network
-- **Group** — Data preprocessing, evaluation pipeline, comparative analysis, final report
+- **Joshua Sherrod**: Logistic Regression
+- **Bradley Mustoe**: Random Forest
+- **Dariel Gutierrez**: Support Vector Machine
+- **Zander Barajas**: Neural Network
+- **Group**: Data preprocessing, evaluation pipeline, comparative analysis, final report
 
 ## Project Structure
 
@@ -19,7 +19,7 @@ financial-classification/
 ├── requirements.txt
 ├── data/
 │   ├── Personal_Finance_Dataset.csv                  # raw D1 (Kaggle: ramyapintchy/personal-finance-data)
-│   ├── aug_personal_transactions_with_UserId.csv    # raw D2 (Kaggle: shyakanobledavid/personal-transactions-userid-new-transactions)
+│   ├── aug_personal_transactions_with_UserId.csv     # raw D2 (Kaggle: shyakanobledavid/personal-transactions-userid-new-transactions)
 │   └── processed_<variant>/                          # generated per variant: train.csv / val.csv / test.csv
 ├── models/
 │   └── <variant>/                                    # generated: <model>.joblib + <model>_confusion_matrix.png
@@ -65,7 +65,7 @@ The pipeline supports four variants designed to isolate the impact of data quali
 | `d1` | D1 only | D1 has Faker-generated descriptions; useful as a "no real signal" baseline |
 | `full` | D1 + D2 | proposal baseline (both raw Kaggle CSVs) |
 | `d2` | D2 only | drops D1's synthetic descriptions |
-| `d2_clean` | D2 + modal-category denoising | "clean ceiling" — keeps only rows whose category equals the modal category for that description |
+| `d2_clean` | D2 + modal-category denoising | "clean ceiling": keeps only rows whose category equals the modal category for that description |
 
 Generate the processed splits:
 
@@ -80,34 +80,26 @@ Each variant writes to `data/processed_<variant>/`.
 
 ## Run Models
 
-Each model script reads the `VARIANT` environment variable (default `full`) and saves to `models/<variant>/`.
+Each model script accepts a `--variant` flag (or falls back to the `VARIANT` env var, default `full`) and saves to `models/<variant>/`.
 
 ```bash
-# Linux / macOS
-VARIANT=full uv run python -m src.logistic_regression
-VARIANT=full uv run python -m src.random_forest
-VARIANT=full uv run python -m src.svm
-VARIANT=full uv run python -m src.neural_network
-
-# Windows PowerShell
-$env:VARIANT="full"
-uv run python -m src.logistic_regression
-uv run python -m src.random_forest
-uv run python -m src.svm
-uv run python -m src.neural_network
+uv run python -m src.logistic_regression --variant full
+uv run python -m src.random_forest      --variant full
+uv run python -m src.svm                --variant full
+uv run python -m src.neural_network     --variant full
 ```
 
-Repeat with `VARIANT=d1`, `VARIANT=d2`, `VARIANT=d2_clean` to populate all 16 (variant × model) artifacts.
+Repeat with `--variant d1`, `--variant d2`, `--variant d2_clean` to populate all 16 (variant × model) artifacts. The env-var form (`VARIANT=full uv run ...` on POSIX, `$env:VARIANT="full"` on PowerShell) still works for batch scripts.
 
 ## Cross-Variant Comparison
 
 `notebooks/MODEL_COMPARISON.ipynb` runs preprocessing + training for all variants, then loads every `models/<variant>/<model>.joblib` and produces:
 
-- `models/cross_variant_results.csv` — long-form results
-- `models/cross_variant_f1_pivot.csv` — macro-F1 by (model × variant)
-- `models/cross_variant_accuracy_pivot.csv` — accuracy by (model × variant)
-- `models/cross_variant_comparison.png` — grouped bar chart, 4 metrics × 4 models × 4 variants
-- `models/cross_variant_heatmap.png` — macro-F1 heatmap
+- `models/cross_variant_results.csv`: long-form results
+- `models/cross_variant_f1_pivot.csv`: macro-F1 by (model × variant)
+- `models/cross_variant_accuracy_pivot.csv`: accuracy by (model × variant)
+- `models/cross_variant_comparison.png`: grouped bar chart, 4 metrics × 4 models × 4 variants
+- `models/cross_variant_heatmap.png`: macro-F1 heatmap
 
 ## Shared Features
 

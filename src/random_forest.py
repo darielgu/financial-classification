@@ -6,6 +6,7 @@ macro-F1, 20 iterations) and saves the best estimator.
 
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 
@@ -21,9 +22,8 @@ from src.evaluate import (
 )
 from src.model_data import get_data_for_model
 
-VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "Random Forest"
-MODEL_PATH = Path(f"models/{VARIANT}/random_forest.joblib")
+MODEL_FILENAME = "random_forest.joblib"
 RANDOM_STATE = 42
 
 PARAM_DIST = {
@@ -68,8 +68,24 @@ def tune_classifier(
     return search.best_estimator_
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=f"Train and evaluate {MODEL_NAME}.")
+    parser.add_argument(
+        "--variant",
+        default=os.environ.get("VARIANT", "full"),
+        help="Preprocessing variant (default: $VARIANT or 'full').",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    x_train, y_train, _x_val, _y_val, x_test, y_test, _ = get_data_for_model()
+    args = parse_args()
+    processed_dir = Path(f"data/processed_{args.variant}")
+    model_path = Path(f"models/{args.variant}/{MODEL_FILENAME}")
+
+    x_train, y_train, _x_val, _y_val, x_test, y_test, _ = get_data_for_model(
+        processed_dir=processed_dir
+    )
 
     clf = build_classifier()
     best_clf = tune_classifier(clf, x_train, y_train)
@@ -80,11 +96,11 @@ def main() -> None:
     print_report(metrics)
     print_classification_report(y_test, y_pred)
 
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(best_clf, MODEL_PATH)
-    print(f"Model saved to {MODEL_PATH}")
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(best_clf, model_path)
+    print(f"Model saved to {model_path}")
 
-    save_confusion_matrix(y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent)
+    save_confusion_matrix(y_test, y_pred, model_name=MODEL_NAME, output_dir=model_path.parent)
 
 
 if __name__ == "__main__":

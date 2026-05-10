@@ -6,6 +6,7 @@ macro-F1). Best config is refit on train+val before final test prediction.
 
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 
@@ -24,9 +25,8 @@ from src.evaluate import (
 )
 from src.model_data import load_processed_splits, prepare_features
 
-VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "Logistic Regression"
-MODEL_PATH = Path(f"models/{VARIANT}/logistic_regression.joblib")
+MODEL_FILENAME = "logistic_regression.joblib"
 RANDOM_STATE = 42
 
 PARAM_GRID = {"C": [0.01, 0.1, 1.0, 10.0]}
@@ -60,10 +60,24 @@ def tune_classifier(x_train, y_train) -> dict:
     return search.best_params_
 
 
-def main() -> None:
-    print(f"Training logistic regression model (variant={VARIANT})...")
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=f"Train and evaluate {MODEL_NAME}.")
+    parser.add_argument(
+        "--variant",
+        default=os.environ.get("VARIANT", "full"),
+        help="Preprocessing variant (default: $VARIANT or 'full').",
+    )
+    return parser.parse_args()
 
-    train_df, val_df, test_df = load_processed_splits()
+
+def main() -> None:
+    args = parse_args()
+    processed_dir = Path(f"data/processed_{args.variant}")
+    model_path = Path(f"models/{args.variant}/{MODEL_FILENAME}")
+
+    print(f"Training logistic regression model (variant={args.variant})...")
+
+    train_df, val_df, test_df = load_processed_splits(processed_dir)
     x_train, y_train, transformed, _ = prepare_features(
         train_df, [val_df, test_df], dense=True,
     )
@@ -85,12 +99,12 @@ def main() -> None:
     print_report(metrics)
     print_classification_report(y_test, y_pred)
 
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(final, MODEL_PATH)
-    print(f"Model saved to {MODEL_PATH}")
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(final, model_path)
+    print(f"Model saved to {model_path}")
 
     save_confusion_matrix(
-        y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent
+        y_test, y_pred, model_name=MODEL_NAME, output_dir=model_path.parent
     )
 
 

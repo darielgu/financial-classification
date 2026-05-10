@@ -37,14 +37,38 @@ wheels/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Data
+# Data (generated; raw CSVs are force-added)
 data/processed/
+data/processed_*/
 *.csv
 
-# Models
+# Models (large binaries; ship in submission ZIP, not in git)
 models/*.joblib
 models/*.pkl
+models/**/*.joblib
+models/**/*.pkl
+
+# Generated cross-variant comparison artifacts
+models/cross_variant_*.csv
+models/cross_variant_*.png
+models/model_comparison.png
+
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+*.bbl
+*.blg
+
+# Stray training/run logs
+*_run.log
+texput.log
 
 # OS
 .DS_Store
 Thumbs.db
+
