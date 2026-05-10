@@ -1,59 +1,101 @@
+"""Train and evaluate the logistic regression model.
+
+Tuning: GridSearchCV over the regularization strength C (per the proposal --
+"tune the regularization strength for logistic regression"). Best config
+is refit on train+val before final test prediction (mirrors svm.py / nn).
+"""
+
+from __future__ import annotations
+
 import os
 from pathlib import Path
+
 import joblib
+import numpy as np
+import pandas as pd
+import scipy.sparse as sp
 from sklearn.linear_model import LogisticRegression
-from src.evaluate import compute_metrics, print_report, print_report, print_classification_report, save_confusion_matrix
-from src.model_data import get_data_for_model
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 
-"""
-RUN python3.14 -m src.logistic_regression
-"""
+from src.evaluate import (
+    compute_metrics,
+    print_classification_report,
+    print_report,
+    save_confusion_matrix,
+)
+from src.model_data import get_data_for_model, load_processed_splits, prepare_features
 
-# Constants to identify model and storage
 VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "logistic_regression"
 MODEL_PATH = Path(f"models/{VARIANT}/logistic_regression.joblib")
+RANDOM_STATE = 42
+
+PARAM_GRID = {"C": [0.01, 0.1, 1.0, 10.0]}
 
 
-def main():
+def build_classifier(C: float = 1.0) -> LogisticRegression:
+    return LogisticRegression(
+        C=C,
+        max_iter=1000,
+        class_weight="balanced",
+        random_state=RANDOM_STATE,
+    )
 
-    """
-    Performs model training pipeline
-    1. Loads preprocessed data
-    2. Trains a logistic regression model
-    3. Evaluates the model on test data
-    4. Saves the trained model
-    """
 
-    print("Training logistic regression model...")
+def tune_classifier(x_train, y_train) -> dict:
+    """Grid search over C with 5-fold stratified CV scored by macro-F1."""
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
+    search = GridSearchCV(
+        estimator=build_classifier(),
+        param_grid=PARAM_GRID,
+        scoring="f1_macro",
+        cv=cv,
+        n_jobs=1,
+        refit=False,
+    )
+    print("Running hyperparameter search (4 configs x 5-fold CV)...")
+    search.fit(x_train, y_train)
+    print(f"\nBest params : {search.best_params_}")
+    print(f"Best CV F1  : {search.best_score_:.4f}")
+    return search.best_params_
 
-    # Load preprocessed data
-    x_train, y_train, x_val, y_val, x_test, y_test, _ = get_data_for_model()
 
-    # Initialize model
-    model = LogisticRegression(max_iter=1000, class_weight="balanced")
+def main() -> None:
+    print(f"Training logistic regression model (variant={VARIANT})...")
 
-    # Train model with training set                
-    model.fit(x_train, y_train)
+    # Load splits dense (LR works on either; matches RF/NN dense path).
+    train_df, val_df, test_df = load_processed_splits()
+    x_train, y_train, transformed, _ = prepare_features(
+        train_df, [val_df, test_df], dense=True,
+    )
+    (x_val, y_val), (x_test, y_test) = transformed
 
-    # Generate predictiond for evaluation
-    y_pred = model.predict(x_test)
+    best_params = tune_classifier(x_train, y_train)
 
-    # Evaluate the model
-    metrics = compute_metrics(y_test, y_pred, model_name = MODEL_NAME)
+    # Refit best config on train+val.
+    if sp.issparse(x_train):
+        x_train_val = sp.vstack([x_train, x_val])
+    else:
+        x_train_val = np.vstack([x_train, x_val])
+    y_train_val = pd.concat([y_train, y_val], ignore_index=True)
+
+    final = build_classifier(**best_params)
+    final.fit(x_train_val, y_train_val)
+
+    y_pred = final.predict(x_test)
+
+    metrics = compute_metrics(y_test, y_pred, model_name=MODEL_NAME)
     print_report(metrics)
     print_classification_report(y_test, y_pred)
 
-    # Create 'models' directory if it doesn't exist
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    # Save the trained model
-    joblib.dump(model, MODEL_PATH)
-
-    # Save the confusion matrix
-    save_confusion_matrix(y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent)
-
+    joblib.dump(final, MODEL_PATH)
     print(f"Model saved to {MODEL_PATH}")
+
+    save_confusion_matrix(
+        y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent
+    )
+
 
 if __name__ == "__main__":
     main()
