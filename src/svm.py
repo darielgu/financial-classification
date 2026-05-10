@@ -10,6 +10,7 @@ or beats it in practice.
 
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 
@@ -29,9 +30,8 @@ from src.evaluate import (
 )
 from src.model_data import load_processed_splits, prepare_features
 
-VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "SVM"
-MODEL_PATH = Path(f"models/{VARIANT}/svm.joblib")
+MODEL_FILENAME = "svm.joblib"
 RANDOM_STATE = 42
 
 # LinearSVC: tune regularization strength C only.
@@ -103,8 +103,22 @@ def tune_with_validation(x_train, y_train, x_val, y_val) -> dict:
     return best_result
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=f"Train and evaluate {MODEL_NAME}.")
+    parser.add_argument(
+        "--variant",
+        default=os.environ.get("VARIANT", "full"),
+        help="Preprocessing variant (default: $VARIANT or 'full').",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    train_df, val_df, test_df = load_processed_splits()
+    args = parse_args()
+    processed_dir = Path(f"data/processed_{args.variant}")
+    model_path = Path(f"models/{args.variant}/{MODEL_FILENAME}")
+
+    train_df, val_df, test_df = load_processed_splits(processed_dir)
 
     x_train, y_train, transformed, feature_transformer = prepare_features(
         train_df, [val_df, test_df], dense=True,
@@ -136,12 +150,12 @@ def main() -> None:
     print_report(metrics)
     print_classification_report(y_test, y_pred)
 
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump({"model": clf, "feature_transformer": feature_transformer}, MODEL_PATH)
-    print(f"Model saved to {MODEL_PATH}")
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump({"model": clf, "feature_transformer": feature_transformer}, model_path)
+    print(f"Model saved to {model_path}")
 
     save_confusion_matrix(
-        y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent
+        y_test, y_pred, model_name=MODEL_NAME, output_dir=model_path.parent
     )
 
 

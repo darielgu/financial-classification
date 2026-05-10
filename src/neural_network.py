@@ -13,6 +13,7 @@ calling ``model.predict(x_test)`` against sparse features unchanged.
 
 from __future__ import annotations
 
+import argparse
 import os
 import time
 from pathlib import Path
@@ -39,9 +40,8 @@ from src.evaluate import (
 )
 from src.model_data import get_data_for_model
 
-VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "Neural Network"
-MODEL_PATH = Path(f"models/{VARIANT}/neural_network.joblib")
+MODEL_FILENAME = "neural_network.joblib"
 RANDOM_STATE = 42
 MINORITY_FLOOR = 200  # cap for the capped RandomOverSampler
 
@@ -133,8 +133,24 @@ def tune_pipeline(pipeline: ImbPipeline, x_train, y_train) -> dict:
     return search.best_params_
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=f"Train and evaluate {MODEL_NAME}.")
+    parser.add_argument(
+        "--variant",
+        default=os.environ.get("VARIANT", "full"),
+        help="Preprocessing variant (default: $VARIANT or 'full').",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    x_train, y_train, x_val, y_val, x_test, y_test, _ = get_data_for_model(dense=False)
+    args = parse_args()
+    processed_dir = Path(f"data/processed_{args.variant}")
+    model_path = Path(f"models/{args.variant}/{MODEL_FILENAME}")
+
+    x_train, y_train, x_val, y_val, x_test, y_test, _ = get_data_for_model(
+        processed_dir=processed_dir, dense=False
+    )
 
     # Encode string categories to ints; works around the sklearn >=1.5 MLP
     # early-stopping isnan-on-strings bug. See LabelDecodingClassifier.
@@ -185,14 +201,14 @@ def main() -> None:
     print_report(metrics)
     print_classification_report(y_test, y_pred)
 
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(final, MODEL_PATH)
-    print(f"Model saved to {MODEL_PATH}")
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(final, model_path)
+    print(f"Model saved to {model_path}")
 
     save_confusion_matrix(
-        y_test, y_pred, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent
+        y_test, y_pred, model_name=MODEL_NAME, output_dir=model_path.parent
     )
-    save_learning_curve(mlp, model_name=MODEL_NAME, output_dir=MODEL_PATH.parent)
+    save_learning_curve(mlp, model_name=MODEL_NAME, output_dir=model_path.parent)
     print_runtime_summary(search_elapsed, refit_elapsed)
 
 
