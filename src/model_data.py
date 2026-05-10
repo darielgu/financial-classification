@@ -1,3 +1,10 @@
+"""Variant-aware loaders that materialize features for any model script.
+
+``DEFAULT_PROCESSED_DIR`` is derived from the ``VARIANT`` environment
+variable (default ``"full"``), so every model script picks up the same
+processed splits without knowing the variant explicitly.
+"""
+
 from __future__ import annotations
 
 import os
@@ -24,6 +31,7 @@ DEFAULT_PROCESSED_DIR = Path(f"data/processed_{VARIANT}")
 def load_processed_splits(
     processed_dir: Path = DEFAULT_PROCESSED_DIR,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Read train/val/test CSVs from the processed-data directory."""
     train = pd.read_csv(processed_dir / "train.csv", parse_dates=["date"])
     val = pd.read_csv(processed_dir / "val.csv", parse_dates=["date"])
     test = pd.read_csv(processed_dir / "test.csv", parse_dates=["date"])
@@ -31,17 +39,14 @@ def load_processed_splits(
 
 
 def get_xy(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
+    """Split a processed dataframe into the feature frame and target series."""
     feature_columns = [*TEXT_LIKE_CATEGORICAL_FEATURES, *NUMERIC_FEATURES]
-    x = df[feature_columns].copy()
-    y = df[TARGET_COLUMN].copy()
-    return x, y
+    return df[feature_columns].copy(), df[TARGET_COLUMN].copy()
 
 
 def _to_array(X) -> np.ndarray:
-    """Convert a sparse matrix or array-like to a dense numpy array."""
-    if sp.issparse(X):
-        return X.toarray()
-    return np.asarray(X)
+    """Densify a sparse matrix or pass through an array-like."""
+    return X.toarray() if sp.issparse(X) else np.asarray(X)
 
 
 def prepare_features(
@@ -50,7 +55,7 @@ def prepare_features(
     *,
     dense: bool = True,
 ):
-    """Fit the shared transformer on train_df and transform each split."""
+    """Fit the shared transformer on ``train_df`` and transform every split."""
     x_train_raw, y_train = get_xy(train_df)
     feature_transformer = build_feature_transformer()
     x_train = feature_transformer.fit_transform(x_train_raw)
@@ -73,7 +78,7 @@ def get_data_for_model(
     *,
     dense: bool = True,
 ) -> Tuple[np.ndarray, pd.Series, np.ndarray, pd.Series, np.ndarray, pd.Series, ColumnTransformer]:
-    """Load processed splits and return transformed train, val, and test sets."""
+    """Load the splits and return transformed train, val, and test sets."""
     train, val, test = load_processed_splits(processed_dir)
     x_train, y_train, transformed, feature_transformer = prepare_features(
         train,

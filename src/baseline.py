@@ -1,4 +1,8 @@
-"""Baseline diagnostic utility for evaluating model problems."""
+"""Stratified DummyClassifier diagnostic.
+
+Provides a per-class-prior random baseline so model scripts can show
+that observed F1 is driven by the model rather than guessing the prior.
+"""
 
 from __future__ import annotations
 
@@ -7,18 +11,7 @@ from sklearn.metrics import f1_score
 
 
 def run_baseline_diagnostic(x_train, y_train, x_test, y_test) -> None:
-    """Run stratified baseline to check if problem is data or algorithm.
-
-    Trains a stratified DummyClassifier and compares its performance to understand
-    whether poor model performance is due to data-level issues (low baseline) or
-    algorithm selection (high baseline despite poor model).
-
-    Args:
-        x_train: Training features
-        y_train: Training labels
-        x_test: Test features
-        y_test: Test labels
-    """
+    """Fit a stratified DummyClassifier on train and report test F1 + accuracy."""
     print("\n" + "=" * 60)
     print("BASELINE DIAGNOSTIC: Stratified Classifier")
     print("=" * 60)
@@ -28,7 +21,6 @@ def run_baseline_diagnostic(x_train, y_train, x_test, y_test) -> None:
     baseline_f1 = f1_score(y_test, y_baseline_pred, average="macro", zero_division=0)
     baseline_acc = (y_baseline_pred == y_test).mean()
 
-    print(f"Baseline Accuracy: {baseline_acc:.4f}")
-    print(f"Baseline F1 (macro): {baseline_f1:.4f}")
-
+    print(f"Baseline Accuracy   : {baseline_acc:.4f}")
+    print(f"Baseline F1 (macro) : {baseline_f1:.4f}")
     print("=" * 60 + "\n")

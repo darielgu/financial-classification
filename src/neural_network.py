@@ -1,13 +1,13 @@
 """Train and evaluate the neural network (MLPClassifier) model.
 
-Pipeline:
+Pipeline::
 
     sparse features (TF-IDF + OHE + scaled amount)
-        -> StandardScaler(with_mean=False)  # sparse-safe; equalize feature scales
-        -> RandomOverSampler (capped)       # mitigate imbalance, train-time only
-        -> MLPClassifier                    # adam + early stopping
+        -> StandardScaler(with_mean=False)   # sparse-safe; equalize feature scales
+        -> RandomOverSampler (capped)        # mitigate class imbalance, train-time only
+        -> MLPClassifier                     # adam + early stopping
 
-The whole pipeline is what gets dumped to disk, so the notebook can keep
+The full pipeline is dumped to disk so the comparison notebook can keep
 calling ``model.predict(x_test)`` against sparse features unchanged.
 """
 
@@ -39,18 +39,15 @@ from src.evaluate import (
 )
 from src.model_data import get_data_for_model
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 VARIANT = os.environ.get("VARIANT", "full")
 MODEL_NAME = "Neural Network"
 MODEL_PATH = Path(f"models/{VARIANT}/neural_network.joblib")
 RANDOM_STATE = 42
-MINORITY_FLOOR = 200  # cap for capped-RandomOverSampler
+MINORITY_FLOOR = 200  # cap for the capped RandomOverSampler
 
-# Hyperparameter search space (note "mlp__" prefix routes into the pipeline step).
-# Tunes what the proposal called out -- layers and learning rate -- plus alpha
-# (L2) for regularization. Activation/batch_size held constant.
+# Tuning surface: layers and learning rate (named in the proposal) plus alpha
+# (L2) for regularization. Activation and batch_size are held constant.
+# The ``mlp__`` prefix routes parameters into the MLP step of the pipeline.
 PARAM_DIST = {
     "mlp__hidden_layer_sizes": [(128,), (256,), (256, 128), (512, 256)],
     "mlp__learning_rate_init": [1e-4, 5e-4, 1e-3, 5e-3],
@@ -58,17 +55,15 @@ PARAM_DIST = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Wrapper: encode string labels to ints for MLPClassifier, decode on predict.
-#
-# Why: sklearn >= 1.5 MLPClassifier early-stopping path calls np.isnan(y_pred)
-# on raw class labels. With string categories ("Dining", ...) this raises
-# TypeError. Encoding y -> int sidesteps that bug while preserving the
-# string-label predict() interface the comparison notebook expects.
-# ---------------------------------------------------------------------------
-
 class LabelDecodingClassifier:
-    """Wrap a fitted classifier and decode integer predictions back to strings."""
+    """Wrap a fitted classifier and decode integer predictions back to strings.
+
+    sklearn >= 1.5 ``MLPClassifier``'s early-stopping path calls
+    ``np.isnan(y_pred)`` on raw class labels, which raises ``TypeError`` on
+    string-typed ``y``. Encoding ``y`` to ints sidesteps the bug while
+    preserving the string-label ``predict()`` interface the comparison
+    notebook expects.
+    """
 
     def __init__(self, estimator, label_encoder: LabelEncoder):
         self.estimator = estimator
@@ -83,16 +78,8 @@ class LabelDecodingClassifier:
         return self.estimator.predict_proba(X)
 
 
-# ---------------------------------------------------------------------------
-# Pipeline building
-# ---------------------------------------------------------------------------
-
 def capped_sampling_strategy(y, cap: int = MINORITY_FLOOR) -> dict:
-    """Bring every class with fewer than ``cap`` samples up to ``cap``.
-
-    Majority classes are not touched. Returned dict is the
-    ``RandomOverSampler.sampling_strategy`` argument.
-    """
+    """Return ``{class -> cap}`` for every class with fewer than ``cap`` samples."""
     counts = pd.Series(y).value_counts()
     return {cls: cap for cls, count in counts.items() if int(count) < cap}
 
@@ -100,8 +87,8 @@ def capped_sampling_strategy(y, cap: int = MINORITY_FLOOR) -> dict:
 def build_pipeline(sampling_strategy) -> ImbPipeline:
     """Build the scaler + capped oversampler + MLP pipeline.
 
-    ``RandomOverSampler`` is wrapped in ``imblearn.pipeline.Pipeline`` so
-    it only runs during ``fit`` (no leakage at predict time).
+    ``RandomOverSampler`` is wrapped in ``imblearn.pipeline.Pipeline`` so it
+    only runs during ``fit`` (no leakage at predict time).
     """
     return ImbPipeline(
         steps=[
@@ -126,9 +113,8 @@ def build_pipeline(sampling_strategy) -> ImbPipeline:
 
 
 def tune_pipeline(pipeline: ImbPipeline, x_train, y_train) -> dict:
-    """Run RandomizedSearchCV and return the best hyperparameter dict."""
+    """Randomized search over ``PARAM_DIST`` with 5-fold stratified CV scored by macro-F1."""
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
-
     search = RandomizedSearchCV(
         estimator=pipeline,
         param_distributions=PARAM_DIST,
@@ -140,42 +126,33 @@ def tune_pipeline(pipeline: ImbPipeline, x_train, y_train) -> dict:
         verbose=2,
         refit=False,
     )
-
     print("Running hyperparameter search (15 configs x 5-fold CV)...")
     search.fit(x_train, y_train)
-
     print(f"\nBest params : {search.best_params_}")
     print(f"Best CV F1  : {search.best_score_:.4f}")
-
     return search.best_params_
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
-
 def main() -> None:
-    # Sparse splits (TF-IDF kept sparse through the scaler step).
     x_train, y_train, x_val, y_val, x_test, y_test, _ = get_data_for_model(dense=False)
 
-    # Encode string categories to integers (works around sklearn >=1.5
-    # MLPClassifier early-stopping isnan-on-strings bug).
+    # Encode string categories to ints; works around the sklearn >=1.5 MLP
+    # early-stopping isnan-on-strings bug. See LabelDecodingClassifier.
     label_encoder = LabelEncoder()
     label_encoder.fit(pd.concat([y_train, y_val, y_test], ignore_index=True))
     y_train_enc = pd.Series(label_encoder.transform(y_train))
     y_val_enc = pd.Series(label_encoder.transform(y_val))
 
-    # Stratified-random baseline floor for the report's discussion section.
-    # DummyClassifier needs dense inputs.
+    # DummyClassifier baseline needs dense inputs.
     x_train_dense = x_train.toarray() if sp.issparse(x_train) else np.asarray(x_train)
     x_test_dense = x_test.toarray() if sp.issparse(x_test) else np.asarray(x_test)
     run_baseline_diagnostic(x_train_dense, y_train, x_test_dense, y_test)
 
-    # Compute capped sampling strategy from the train-fold-side reference;
-    # reused for both CV search and the final refit.
     cv_strategy = capped_sampling_strategy(y_train_enc)
-    print(f"\nCapped oversampling strategy (cap={MINORITY_FLOOR}): "
-          f"{len(cv_strategy)} of {y_train_enc.nunique()} classes lifted")
+    print(
+        f"\nCapped oversampling strategy (cap={MINORITY_FLOOR}): "
+        f"{len(cv_strategy)} of {y_train_enc.nunique()} classes lifted"
+    )
 
     pipeline = build_pipeline(cv_strategy)
 
@@ -183,7 +160,6 @@ def main() -> None:
     best_params = tune_pipeline(pipeline, x_train, y_train_enc)
     search_elapsed = time.perf_counter() - t_search_start
 
-    # Refit best config on train+val.
     if sp.issparse(x_train):
         x_train_val = sp.vstack([x_train, x_val])
     else:

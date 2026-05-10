@@ -1,8 +1,7 @@
 """Train and evaluate the logistic regression model.
 
-Tuning: GridSearchCV over the regularization strength C (per the proposal --
-"tune the regularization strength for logistic regression"). Best config
-is refit on train+val before final test prediction (mirrors svm.py / nn).
+Tunes the regularization strength ``C`` via ``GridSearchCV`` (5-fold,
+macro-F1). Best config is refit on train+val before final test prediction.
 """
 
 from __future__ import annotations
@@ -23,10 +22,10 @@ from src.evaluate import (
     print_report,
     save_confusion_matrix,
 )
-from src.model_data import get_data_for_model, load_processed_splits, prepare_features
+from src.model_data import load_processed_splits, prepare_features
 
 VARIANT = os.environ.get("VARIANT", "full")
-MODEL_NAME = "logistic_regression"
+MODEL_NAME = "Logistic Regression"
 MODEL_PATH = Path(f"models/{VARIANT}/logistic_regression.joblib")
 RANDOM_STATE = 42
 
@@ -34,6 +33,7 @@ PARAM_GRID = {"C": [0.01, 0.1, 1.0, 10.0]}
 
 
 def build_classifier(C: float = 1.0) -> LogisticRegression:
+    """Return an unfitted LogisticRegression with class-balanced weighting."""
     return LogisticRegression(
         C=C,
         max_iter=1000,
@@ -43,7 +43,7 @@ def build_classifier(C: float = 1.0) -> LogisticRegression:
 
 
 def tune_classifier(x_train, y_train) -> dict:
-    """Grid search over C with 5-fold stratified CV scored by macro-F1."""
+    """Grid search over ``C`` with 5-fold stratified CV scored by macro-F1."""
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
     search = GridSearchCV(
         estimator=build_classifier(),
@@ -63,7 +63,6 @@ def tune_classifier(x_train, y_train) -> dict:
 def main() -> None:
     print(f"Training logistic regression model (variant={VARIANT})...")
 
-    # Load splits dense (LR works on either; matches RF/NN dense path).
     train_df, val_df, test_df = load_processed_splits()
     x_train, y_train, transformed, _ = prepare_features(
         train_df, [val_df, test_df], dense=True,
@@ -72,7 +71,6 @@ def main() -> None:
 
     best_params = tune_classifier(x_train, y_train)
 
-    # Refit best config on train+val.
     if sp.issparse(x_train):
         x_train_val = sp.vstack([x_train, x_val])
     else:
@@ -81,7 +79,6 @@ def main() -> None:
 
     final = build_classifier(**best_params)
     final.fit(x_train_val, y_train_val)
-
     y_pred = final.predict(x_test)
 
     metrics = compute_metrics(y_test, y_pred, model_name=MODEL_NAME)
