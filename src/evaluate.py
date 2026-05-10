@@ -89,7 +89,7 @@ def save_confusion_matrix(
     plt.tight_layout()
 
     out_path = output_dir / f"{model_name.lower().replace(' ', '_')}_confusion_matrix.png"
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Confusion matrix saved to {out_path}")
 
